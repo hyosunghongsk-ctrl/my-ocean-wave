@@ -182,7 +182,6 @@ try:
     </div>
     """
 
-    # autoClose=False 지정으로 다른 곳 클릭 시에도 안 닫히게 설정
     popup = folium.Popup(popup_html, max_width=700, show=True, auto_close=False)
 
     m = folium.Map(
@@ -199,10 +198,8 @@ try:
         icon=folium.Icon(color='red', icon='home')
     ).add_to(m)
 
-    # 지도가 로드될 때 팝업이 즉시 열린 상태가 되도록 처리
     marker.add_child(popup)
 
-    # Streamlit 화면에 출력
     map_html = m._repr_html_()
     components.html(map_html, height=800, scrolling=True)
 
