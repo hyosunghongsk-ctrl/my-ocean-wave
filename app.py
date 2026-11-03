@@ -119,4 +119,92 @@ try:
             time_label = f"{mm_dd} {ampm}(예측)"
             
             wh1, wh2 = item.get('wh1'), item.get('wh2')
-            wave_fcst_str = f"{wh1} ~ {wh2}m" if wh1 and wh2 else f"{wh1 or wh2 or '-
+            wave_fcst_str = f"{wh1} ~ {wh2}m" if wh1 and wh2 else f"{wh1 or wh2 or '-'}m"
+            
+            fcst_rows.append({
+                '일시': time_label,
+                '날씨': add_weather_emoji(item.get('wf', '-')),
+                '파고_통합': wave_fcst_str,
+                '파주기': '-',
+                '풍속': f"{item.get('ws1', '-')} ~ {item.get('ws2', '-')}m/s"
+            })
+    df_fcst_summary = pd.DataFrame(fcst_rows)
+
+    combined_rows = []
+    for _, row in recent_real.iterrows():
+        wave_val = f"{float(row['wvhgt']):.1f}m"
+        combined_rows.append({
+            '일시': row['datetime'].strftime('%m_%d %H:%M'),
+            '날씨': '-',
+            '파고/예측(m)': wave_val,
+            '파주기(s)': f"{float(row['wvpd']):.1f}",
+            '풍속': '-',
+            '파도 사진': get_wave_image_html(wave_val)
+        })
+
+    for _, row in df_fcst_summary.iterrows():
+        wave_val = row['파고_통합']
+        combined_rows.append({
+            '일시': row['일시'],
+            '날씨': row['날씨'],
+            '파고/예측(m)': wave_val,
+            '파주기(s)': row['파주기'],
+            '풍속': row['풍속'],
+            '파도 사진': get_wave_image_html(wave_val)
+        })
+
+    final_df = pd.DataFrame(combined_rows)
+    table_html = final_df.to_html(
+        index=False,
+        escape=False,
+        classes='table table-striped table-hover',
+        justify='center'
+    )
+
+    # ==========================================
+    # 5. Folium 지도 생성 (팝업 상시 오픈 설정)
+    # ==========================================
+    FIXED_LAT = 36.3446379315253
+    FIXED_LOT = 129.386231597459
+
+    popup_html = f"""
+    <div style="width: 680px; max-height: 580px; overflow-y: auto;">
+        <h3 style="margin-bottom: 6px; font-size: 21px;"><b>🏡 우리집 앞 바다 (TW_0095)</b></h3>
+        <p style="margin-top: 0; color: #555; font-size: 16px;">📍 위치: {FIXED_LAT:.6f}, {FIXED_LOT:.6f}</p>
+        <p style="margin-top: 0; color: #0066cc; font-size: 16px;">📊 최근 실측 2건 + 기상청 해상예보</p>
+        <style>
+            table {{ border-collapse: collapse; width: 100%; font-size: 16px; text-align: center; }}
+            th {{ background-color: #e9ecef; position: sticky; top: 0; padding: 10px; border-bottom: 2px solid #dee2e6; z-index: 10; font-size: 16px; }}
+            td {{ padding: 8px 10px; border-bottom: 1px solid #ddd; vertical-align: middle; white-space: nowrap; font-size: 16px; }}
+            tr:nth-child(n+{len(recent_real)+1}) {{ background-color: #f0f7ff; font-weight: bold; }}
+        </style>
+        {table_html}
+    </div>
+    """
+
+    # autoClose=False 지정으로 다른 곳 클릭 시에도 안 닫히게 설정
+    popup = folium.Popup(popup_html, max_width=700, show=True, auto_close=False)
+
+    m = folium.Map(
+        location=[FIXED_LAT, FIXED_LOT],
+        zoom_start=15,
+        tiles="https://xdworld.vworld.kr/2d/Base/service/{z}/{x}/{y}.png",
+        attr="Vworld Space"
+    )
+
+    marker = folium.Marker(
+        location=[FIXED_LAT, FIXED_LOT],
+        popup=popup,
+        tooltip="우리집 앞 바다 실측 및 예보 정보",
+        icon=folium.Icon(color='red', icon='home')
+    ).add_to(m)
+
+    # 지도가 로드될 때 팝업이 즉시 열린 상태가 되도록 처리
+    marker.add_child(popup)
+
+    # Streamlit 화면에 출력
+    map_html = m._repr_html_()
+    components.html(map_html, height=800, scrolling=True)
+
+except Exception as e:
+    st.error(f"데이터를 불러오는 중 오류가 발생했습니다: {e}")
